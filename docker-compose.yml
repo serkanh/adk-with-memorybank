@@ -11,6 +11,8 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"  # ADK web interface default port
+    env_file:
+      - .env  # Load environment variables from .env file
     environment:
       # Google Cloud configuration
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
@@ -21,6 +23,7 @@ services:
       # ADK configuration
       APP_NAME: adk-memory-bot
       DEFAULT_USER_ID: user_123
+      AGENT_ENGINE_ID: ${AGENT_ENGINE_ID}
       
       # Python configuration
       PYTHONPATH: /app
@@ -28,8 +31,8 @@ services:
     volumes:
       - ~/.config/gcloud:/root/.config/gcloud:ro  # Mount ADC
       - ~/.config/gcloud/application_default_credentials.json:/app/credentials/service-account.json:ro
-      - ./logs:/app/logs
       - ./agents:/app/agents  # Mount agents directory
+      - ./logs:/app/logs  # Mount logs directory
     command: ["adk", "web", "agents", "--host", "0.0.0.0", "--port", "8000", "--memory_service_uri", "agentengine://${AGENT_ENGINE_ID}"]
     networks:
       - adk-network
@@ -44,6 +47,8 @@ services:
     restart: unless-stopped
     ports:
       - "8001:8000"  # Map to different external port
+    env_file:
+      - .env  # Load environment variables from .env file
     environment:
       # Google Cloud configuration
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
@@ -54,6 +59,7 @@ services:
       # ADK configuration
       APP_NAME: adk-memory-bot
       DEFAULT_USER_ID: user_123
+      AGENT_ENGINE_ID: ${AGENT_ENGINE_ID}
       
       # Python configuration
       PYTHONPATH: /app
@@ -61,8 +67,8 @@ services:
     volumes:
       - ~/.config/gcloud:/root/.config/gcloud:ro  # Mount ADC
       - ~/.config/gcloud/application_default_credentials.json:/app/credentials/service-account.json:ro
-      - ./logs:/app/logs
       - ./agents:/app/agents  # Mount agents directory
+      - ./logs:/app/logs  # Mount logs directory
     command: ["adk", "api_server", "agents", "--host", "0.0.0.0", "--port", "8000", "--memory_service_uri", "agentengine://${AGENT_ENGINE_ID}"]
     networks:
       - adk-network
@@ -70,7 +76,3 @@ services:
 networks:
   adk-network:
     driver: bridge
-
-volumes:
-  logs:
-    driver: local

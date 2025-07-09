@@ -124,7 +124,14 @@ cd adk-with-memorybank
 
 2. Set up environment variables:
 ```bash
-# Set your Google Cloud project
+# Create .env file in project root
+cat > .env << EOF
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+AGENT_ENGINE_ID=
+EOF
+
+# Also export for local commands
 export GOOGLE_CLOUD_PROJECT=your-project-id
 export GOOGLE_CLOUD_LOCATION=us-central1
 export GOOGLE_GENAI_USE_VERTEXAI=TRUE
@@ -132,7 +139,7 @@ export GOOGLE_GENAI_USE_VERTEXAI=TRUE
 
 3. **Create Agent Engine** (Required):
 ```bash
-# Create the Agent Engine first
+# Create the Agent Engine first (ensure you have GOOGLE_CLOUD_PROJECT set)
 docker-compose run --rm memory-bot-web python create_agent_engine.py
 
 # This will:
@@ -182,6 +189,8 @@ docker-compose up memory-bot-api
 # OR start both
 docker-compose up
 ```
+
+> **Note**: The `agents` directory is mounted directly to `/app/agents` in the containers, and logs are mounted to `/app/logs`. This focused mounting approach ensures ADK finds your agents while keeping the container clean.
 
 **Expected Output:**
 When successful, you should see:
@@ -265,19 +274,30 @@ docker-compose run memory-bot-web gcloud auth activate-service-account --key-fil
 
 Verify the agent structure is correct:
 ```bash
-# Test that ADK can find the agents directory
+# Test agents directory structure
 docker-compose run --rm memory-bot-web ls -la /app/agents/
 
-# Should show: memory_assistant directory
+# Should show: memory_assistant/ directory and __init__.py
 
-# Test agent loading
+# Test agent loading (ADK-compatible)
 docker-compose run --rm memory-bot-web python -c "
 import sys
-sys.path.append('/app/agents')
-from memory_assistant import root_agent
+sys.path.append('/app')
+from agents import root_agent
 print('Agent loaded successfully:', root_agent.name)
 "
+
+# Test ADK can find the agent
+docker-compose run --rm memory-bot-web adk list agents
+
+# Should output: agents (your mounted agents directory)
 ```
+
+### Logs and Development
+
+- **Agents**: Changes to agents are immediately reflected in running containers
+- **Logs**: Created in `/app/logs` inside containers and visible in your local `./logs` directory
+- **Development**: Clean, focused mounting ensures ADK works correctly while keeping development files accessible
 
 ### Option 2: Local Development
 
