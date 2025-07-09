@@ -1,0 +1,264 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# Google Cloud Platform
+credentials/
+*.json
+service-account.json
+application_default_credentials.json
+.config/gcloud/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs
+logs/
+*.log
+log/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE/Editor files
+.vscode/
+.sublime-workspace
+.sublime-project
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# ADK specific
+agents/.cache/
+agents/*/sessions/
+agents/*/memory/
+.adk/
+
+# Session and memory data
+sessions/
+memory/
+session_data/
+memory_data/
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+*.tar.gz
+*.zip
+*.rar
+
+# Local development
+local/
+dev/
+sandbox/
+
+# Node.js (if any frontend components)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup files
+*.bak
+*.backup
+backup/
+
+# Test files
+test_output/
+test_results/
+.coverage.*
+
+# Documentation build
+docs/_build/
+docs/build/
+
+# Local configuration
+config.local.py
+settings.local.py
+local_settings.py
+
+# Cache directories
+.cache/
+cache/
+.pytest_cache/
+
+# Runtime files
+*.pid
+*.sock
+
+# Lock files
+*.lock
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv*/
+env*/
+ENV*/
+
+# Google Cloud Storage
+.gcs/
+
+# Firebase
+.firebase/
+firebase.json
+.firebaserc
+
+# Terraform (if used for infrastructure)
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+terraform.tfvars.json
+
+# Kubernetes (if used for deployment)
+*.kubeconfig
+kubeconfig
+k8s-secrets/
+
+# Monitoring and profiling
+*.prof
+*.pprof
+
+# Memory dumps
+*.hprof
+*.heap
+
+# ADK generated files
+.adk-cache/
+adk-sessions/
+adk-memory/ 
