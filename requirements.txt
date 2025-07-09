@@ -1,4 +1,5 @@
 google-cloud-aiplatform>=1.100.0
 google-adk>=1.5.0
 uvicorn>=0.24.0
-fastapi>=0.104.0 
+fastapi>=0.104.0
+python-dotenv>=1.0.0 

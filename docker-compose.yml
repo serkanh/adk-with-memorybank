@@ -1,10 +1,16 @@
 version: '3.8'
 
 services:
-  # ADK Bot Application
-  adk-bot:
-    build: .
-    container_name: adk-bot-app
+  # ADK Memory Bot Web Interface
+  memory-bot-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: adk-memory-bot:latest
+    container_name: memory-bot-web
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # ADK web interface default port
     environment:
       # Google Cloud configuration
       GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
@@ -12,25 +18,59 @@ services:
       GOOGLE_GENAI_USE_VERTEXAI: "TRUE"
       GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
       
-      # Application configuration
-      APP_PORT: 8080
-      APP_ENV: development
+      # ADK configuration
+      APP_NAME: adk-memory-bot
+      DEFAULT_USER_ID: user_123
       
-    ports:
-      - "8080:8080"
+      # Python configuration
+      PYTHONPATH: /app
+      
     volumes:
-      - ./credentials:/app/credentials:ro
+      - ~/.config/gcloud:/root/.config/gcloud:ro  # Mount ADC
+      - ~/.config/gcloud/application_default_credentials.json:/app/credentials/service-account.json:ro
       - ./logs:/app/logs
-    restart: unless-stopped
+      - ./agents:/app/agents  # Mount agents directory
+    command: ["adk", "web", "agents", "--host", "0.0.0.0", "--port", "8000"]
     networks:
       - adk-network
-    command: python -m uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
-volumes:
-  # No volumes needed - using Vertex AI services
-  logs:
-    driver: local
+  # ADK Memory Bot API Server
+  memory-bot-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: adk-memory-bot:latest
+    container_name: memory-bot-api
+    restart: unless-stopped
+    ports:
+      - "8001:8000"  # Map to different external port
+    environment:
+      # Google Cloud configuration
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
+      GOOGLE_GENAI_USE_VERTEXAI: "TRUE"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+      
+      # ADK configuration
+      APP_NAME: adk-memory-bot
+      DEFAULT_USER_ID: user_123
+      
+      # Python configuration
+      PYTHONPATH: /app
+      
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro  # Mount ADC
+      - ~/.config/gcloud/application_default_credentials.json:/app/credentials/service-account.json:ro
+      - ./logs:/app/logs
+      - ./agents:/app/agents  # Mount agents directory
+    command: ["adk", "api_server", "agents", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - adk-network
 
 networks:
   adk-network:
-    driver: bridge 
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local

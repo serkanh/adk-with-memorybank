@@ -3,23 +3,28 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# Copy requirements file
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy project files
 COPY . .
 
-# Create logs directory
-RUN mkdir -p /app/logs
+# Expose port (ADK web uses 8000 by default)
+EXPOSE 8000
 
-# Expose port
-EXPOSE 8080
-
-# Run the application
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"] 
+# Set default command (can be overridden in docker-compose)
+CMD ["adk", "web", "--host", "0.0.0.0"]
