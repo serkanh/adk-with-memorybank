@@ -30,7 +30,7 @@ services:
       - ~/.config/gcloud/application_default_credentials.json:/app/credentials/service-account.json:ro
       - ./logs:/app/logs
       - ./agents:/app/agents  # Mount agents directory
-    command: ["adk", "web", "agents", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["adk", "web", "agents", "--host", "0.0.0.0", "--port", "8000", "--memory_service_uri", "agentengine://${AGENT_ENGINE_ID}"]
     networks:
       - adk-network
 
@@ -63,7 +63,7 @@ services:
       - ~/.config/gcloud/application_default_credentials.json:/app/credentials/service-account.json:ro
       - ./logs:/app/logs
       - ./agents:/app/agents  # Mount agents directory
-    command: ["adk", "api_server", "agents", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["adk", "api_server", "agents", "--host", "0.0.0.0", "--port", "8000", "--memory_service_uri", "agentengine://${AGENT_ENGINE_ID}"]
     networks:
       - adk-network
 

@@ -124,17 +124,24 @@ cd adk-with-memorybank
 
 2. Set up environment variables:
 ```bash
-# Copy and edit environment file
-cp .env.example .env
-
-# Edit .env with your Google Cloud project details
-# Required variables:
-# GOOGLE_CLOUD_PROJECT=your-project-id
-# GOOGLE_CLOUD_LOCATION=us-central1
-# GOOGLE_GENAI_USE_VERTEXAI=TRUE
+# Set your Google Cloud project
+export GOOGLE_CLOUD_PROJECT=your-project-id
+export GOOGLE_CLOUD_LOCATION=us-central1
+export GOOGLE_GENAI_USE_VERTEXAI=TRUE
 ```
 
-3. **Choose Authentication Method:**
+3. **Create Agent Engine** (Required):
+```bash
+# Create the Agent Engine first
+docker-compose run --rm memory-bot-web python create_agent_engine.py
+
+# This will:
+# 1. Create a new Agent Engine in Google Cloud
+# 2. Update your .env file with the AGENT_ENGINE_ID
+# 3. Show you the Agent Engine details
+```
+
+4. **Choose Authentication Method:**
 
 #### Option A: Use Application Default Credentials (Recommended)
 ```bash
@@ -164,7 +171,7 @@ gcloud iam service-accounts keys create credentials/service-account.json \
 mkdir -p credentials
 ```
 
-4. Start the services:
+5. Start the services:
 ```bash
 # Start web interface
 docker-compose up memory-bot-web
@@ -538,6 +545,50 @@ GOOGLE_CLOUD_LOG_LEVEL=DEBUG
 
 # Or export environment variable
 export GOOGLE_CLOUD_LOG_LEVEL=DEBUG
+```
+
+## Monitoring Sessions and Memory
+
+### Check Sessions and Memory Entries
+
+Use the included utility script to inspect your ADK sessions and memory:
+
+```bash
+# Run from Docker container
+docker-compose run --rm memory-bot-web python check_sessions_memory.py
+
+# Or run locally (after setting environment variables)
+python check_sessions_memory.py
+```
+
+### Google Cloud Console
+
+1. **Agent Engine Dashboard**:
+   - Navigate to: Google Cloud Console → AI Platform → Agent Engine
+   - Find your Agent Engine ID in the application logs
+   - View Sessions and Memory tabs
+
+2. **Using gcloud CLI**:
+```bash
+# List sessions
+gcloud ai agent-engines sessions list \
+  --agent-engine=YOUR_AGENT_ENGINE_ID \
+  --location=us-central1
+
+# List memory entries
+gcloud ai agent-engines memory-entries list \
+  --agent-engine=YOUR_AGENT_ENGINE_ID \
+  --location=us-central1
+```
+
+### Get Agent Engine ID
+
+```bash
+# From Docker logs
+docker-compose logs memory-bot-web | grep -i "agent engine"
+
+# Or from gcloud
+gcloud ai agent-engines list --location=us-central1
 ```
 
 ## License
