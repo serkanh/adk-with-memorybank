@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # ADK Bot Application
+  adk-bot:
+    build: .
+    container_name: adk-bot-app
+    environment:
+      # Google Cloud configuration
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-us-central1}
+      GOOGLE_GENAI_USE_VERTEXAI: "TRUE"
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/service-account.json
+      
+      # Application configuration
+      APP_PORT: 8080
+      APP_ENV: development
+      
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./credentials:/app/credentials:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - adk-network
+    command: python -m uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+
+volumes:
+  # No volumes needed - using Vertex AI services
+  logs:
+    driver: local
+
+networks:
+  adk-network:
+    driver: bridge 
