@@ -64,15 +64,36 @@ async def auto_save_to_memory_callback(callback_context):
             agent_engine_id=agent_engine_id
         )
         
-        # Get the completed session
-        session = await session_service.get_session(
-            app_name=app_name,
-            user_id=user_id,
-            session_id=session_id
-        )
+        # Get the session from the invocation context directly (has current events)
+        session = callback_context._invocation_context.session
         
         # Check if session has meaningful content
-        if not hasattr(session, 'contents') or not session.contents or len(session.contents) < 2:
+        print(f"🔍 Session contents check from invocation context:")
+        print(f"  - hasattr(session, 'contents'): {hasattr(session, 'contents')}")
+        if hasattr(session, 'contents'):
+            print(f"  - session.contents: {session.contents}")
+            print(f"  - len(session.contents): {len(session.contents) if session.contents else 0}")
+        
+        # Check if session has events instead of contents
+        if hasattr(session, 'events'):
+            print(f"  - hasattr(session, 'events'): {hasattr(session, 'events')}")
+            print(f"  - session.events: {session.events}")
+            print(f"  - len(session.events): {len(session.events) if session.events else 0}")
+        
+        # More flexible check - look for events or contents
+        has_content = False
+        content_count = 0
+        
+        if hasattr(session, 'events') and session.events:
+            content_count = len(session.events)
+            has_content = content_count >= 2
+        elif hasattr(session, 'contents') and session.contents:
+            content_count = len(session.contents)
+            has_content = content_count >= 2
+            
+        print(f"  - Content count: {content_count}, Has meaningful content: {has_content}")
+        
+        if not has_content:
             print("📭 Session has no meaningful content, skipping memory save")
             return
             
