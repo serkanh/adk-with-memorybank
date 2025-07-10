@@ -91,16 +91,94 @@ agent_engine = agent_engines.create()
 agent_engine_id = agent_engine.name
 ```
 
-### Memory Management Process
-1. **Session Creation**: Create sessions with VertexAiSessionService for immediate conversation state
-2. **Conversation Flow**: Handle user interactions through the runner with Vertex AI session persistence
-3. **Memory Persistence**: Add completed sessions to Vertex AI Memory Bank for long-term storage
-4. **Memory Recall**: Use PreloadMemoryTool to retrieve relevant context from Memory Bank
+### Memory Management Process: Deep Dive
 
-### Architecture
-- **Vertex AI Session Service**: Stores active session data, conversation history, and temporary state
-- **Vertex AI Memory Bank**: Stores processed memories, semantic search-enabled long-term context
-- **Integrated**: Both services work together seamlessly within the same Agent Engine
+#### 1. Session Creation and Management
+The `VertexAiSessionService` handles immediate conversation state:
+- Creates sessions with unique IDs for each conversation
+- Stores ongoing message exchanges in real-time
+- Maintains conversation context within the session
+- Provides temporary storage for active conversations
+
+#### 2. Conversation Flow and State Management
+During active conversations:
+- User messages are immediately stored in the session
+- Agent responses are appended to the session events
+- The session maintains the full conversation thread
+- State is preserved across multiple turns within the same session
+
+#### 3. Memory Persistence: The Callback System
+**Critical Implementation Detail**: The `after_agent_callback` mechanism:
+
+```python
+async def auto_save_to_memory_callback(callback_context):
+    """Automatically save completed sessions to memory bank"""
+    # Extract session information from callback context
+    session_id = callback_context._invocation_context.session.id
+    user_id = callback_context._invocation_context.user_id
+    app_name = callback_context._invocation_context.session.app_name
+    
+    # Get session directly from invocation context (has current events)
+    session = callback_context._invocation_context.session
+    
+    # Transfer to memory bank
+    await memory_service.add_session_to_memory(session)
+```
+
+**Why this works**: The callback context contains the live session with all current events, while retrieving from the session service may return outdated data before persistence is complete.
+
+#### 4. Memory Recall and Context Retrieval
+The `PreloadMemoryTool` performs semantic search:
+- Searches the Memory Bank for relevant historical context
+- Uses vector similarity to find related conversations
+- Returns the most relevant memories for the current query
+- Integrates seamlessly with the agent's response generation
+
+### Architecture: Sessions vs Memory Bank
+
+#### Session Service (VertexAiSessionService)
+**Purpose**: Immediate conversation state management
+- **Storage**: Active sessions with real-time conversation events
+- **Lifecycle**: Created per conversation, persisted during active use
+- **Access Pattern**: Direct session retrieval by ID
+- **Data Structure**: Events array with user/agent message exchanges
+- **Use Case**: Maintaining conversation context, handling multi-turn interactions
+
+#### Memory Bank (VertexAiMemoryBankService)
+**Purpose**: Long-term semantic memory storage
+- **Storage**: Processed conversation summaries and key information
+- **Lifecycle**: Persistent across all conversations, continuously growing
+- **Access Pattern**: Semantic search using vector embeddings
+- **Data Structure**: Searchable memory chunks with metadata
+- **Use Case**: Retrieving relevant context from past conversations
+
+#### Integration Flow
+```
+User Message → Session Service (immediate storage)
+     ↓
+Agent Processing (with PreloadMemoryTool search)
+     ↓
+Agent Response → Session Service (append to events)
+     ↓
+After Agent Callback → Memory Bank (transfer for long-term storage)
+```
+
+#### Critical Technical Details
+
+**Callback Context Structure**:
+- `callback_context._invocation_context.session`: Live session with current events
+- `callback_context._invocation_context.user_id`: Current user identifier
+- `callback_context._invocation_context.session.id`: Session ID for tracking
+
+**Session Event Structure**:
+- Sessions contain `events` array (not `contents`)
+- Each event has content with user/agent messages
+- Events are appended in real-time during conversation
+
+**Memory Transfer Timing**:
+- Callback runs immediately after agent completes response
+- Session service may not have persisted events yet
+- **Solution**: Use session from callback context directly, not from service retrieval
 
 ### Best Practices for Agent Instructions
 When crafting agent instructions, include:
@@ -186,24 +264,141 @@ runner = Runner(
 )
 ```
 
-### 2. Memory Persistence
+### 2. Memory Persistence (Automatic Callback)
 ```python
-# After conversation completion - retrieve from VertexAiSessionService
-completed_session = await runner.session_service.get_session(
-    app_name=app_name, user_id=USER_ID, session_id=session_id
-)
+# Define automatic memory transfer callback
+async def auto_save_to_memory_callback(callback_context):
+    """Automatically save completed sessions to memory bank"""
+    try:
+        print(f"🔄 Auto-saving session to memory...")
+        
+        # Extract session information from callback context
+        session_id = callback_context._invocation_context.session.id
+        user_id = callback_context._invocation_context.user_id
+        app_name = callback_context._invocation_context.session.app_name
+        
+        print(f"🎯 Extracted - Session ID: {session_id}, User ID: {user_id}, App Name: {app_name}")
+        
+        if not session_id:
+            print("⚠️  No session ID found in callback context, skipping memory save")
+            return
+        
+        # Initialize memory service
+        memory_service = VertexAiMemoryBankService(
+            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            agent_engine_id=os.getenv("AGENT_ENGINE_ID")
+        )
+        
+        # Get session directly from invocation context (has current events)
+        session = callback_context._invocation_context.session
+        
+        # Check if session has meaningful content
+        has_content = False
+        content_count = 0
+        
+        if hasattr(session, 'events') and session.events:
+            content_count = len(session.events)
+            has_content = content_count >= 2  # At least user message + agent response
+        
+        if not has_content:
+            print("📭 Session has no meaningful content, skipping memory save")
+            return
+            
+        # Transfer to memory bank
+        await memory_service.add_session_to_memory(session)
+        print(f"✅ Session {session_id} automatically saved to memory bank")
+        
+    except Exception as e:
+        print(f"❌ Error auto-saving to memory: {e}")
+        import traceback
+        traceback.print_exc()
 
-# Transfer to Vertex AI Memory Bank for long-term storage
-await memory_bank_service.add_session_to_memory(completed_session)
+# Agent with automatic memory callback
+agent = adk.Agent(
+    model="gemini-2.0-flash-exp",
+    name="memory_assistant",
+    instruction="""You are a helpful assistant with perfect memory across conversations.
 
-# Test memory recall in new session
-new_session = await session_service.create_session(app_name=app_name, user_id=USER_ID)
-response = await call_agent_async(
-    "What did we discuss before?", 
-    runner, USER_ID, new_session.id
+Instructions:
+- Use the PreloadMemoryTool to access relevant context from previous conversations
+- Naturally reference past conversations when relevant to provide personalized responses
+- Build upon previous knowledge about the user to create continuity
+- The memories shown are the most relevant to the current query based on semantic search
+- Always maintain a friendly and helpful tone
+- If you don't find relevant memories, focus on the current conversation
+- Keep responses concise and focused on the user's needs
+- When referencing memories, do so naturally without explicitly mentioning "memory search"
+
+Your goal is to provide consistent, personalized assistance by leveraging conversation history.
+
+Remember: Use the PreloadMemoryTool to search for relevant information from previous conversations.""",
+    tools=[adk.tools.preload_memory_tool.PreloadMemoryTool()],
+    after_agent_callback=auto_save_to_memory_callback,
 )
-# Agent will use PreloadMemoryTool to search Memory Bank
 ```
+
+## Memory and Session Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. Callback Context Session Access
+**Problem**: Sessions retrieved from `session_service.get_session()` are empty
+**Cause**: Callback runs before session events are persisted to storage
+**Solution**: Use session from callback context directly:
+```python
+# ❌ Wrong - retrieves from service (may be empty)
+session = await session_service.get_session(app_name, user_id, session_id)
+
+# ✅ Correct - uses live session from context
+session = callback_context._invocation_context.session
+```
+
+#### 2. Session Content Structure
+**Problem**: Expecting `session.contents` but getting empty results
+**Cause**: Sessions use `events` array, not `contents`
+**Solution**: Check for events:
+```python
+# ❌ Wrong - looking for contents
+if hasattr(session, 'contents') and session.contents:
+    content_count = len(session.contents)
+
+# ✅ Correct - check events
+if hasattr(session, 'events') and session.events:
+    content_count = len(session.events)
+```
+
+#### 3. Memory Transfer Timing
+**Problem**: Memory callback not finding session content
+**Cause**: Timing issue between callback execution and session persistence
+**Solution**: Use callback context session directly and check content meaningfully:
+```python
+# Ensure session has at least user message + agent response
+has_content = content_count >= 2
+```
+
+#### 4. PreloadMemoryTool Not Executing
+**Problem**: Tool returns code instead of executing
+**Cause**: No memories exist yet, or tool not properly configured
+**Solution**: Ensure automatic memory transfer is working and memories are being saved
+
+### Best Practices for Memory Implementation
+
+#### Callback Implementation
+- Always extract session from `callback_context._invocation_context.session`
+- Check for meaningful content before transferring to memory
+- Handle exceptions gracefully with logging
+- Use environment variables for service configuration
+
+#### Session Management
+- Create sessions with meaningful app names and user IDs
+- Let ADK handle session lifecycle automatically
+- Don't manually manage session persistence
+
+#### Memory Bank Usage
+- Rely on semantic search for relevant context retrieval
+- Trust the PreloadMemoryTool to find relevant memories
+- Design agent instructions to naturally integrate memory context
 
 ## Error Handling and Production Considerations
 

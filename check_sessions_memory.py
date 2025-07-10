@@ -45,10 +45,22 @@ async def check_sessions(agent_engine_id):
         )
         
         # List sessions for the user
-        sessions = await session_service.list_sessions(
+        sessions_response = await session_service.list_sessions(
             app_name=APP_NAME,
             user_id=USER_ID
         )
+        
+        # Extract actual sessions list
+        sessions = []
+        if hasattr(sessions_response, 'sessions'):
+            sessions = sessions_response.sessions or []
+        elif hasattr(sessions_response, 'items'):
+            sessions = sessions_response.items or []
+        else:
+            try:
+                sessions = list(sessions_response)
+            except:
+                sessions = []
         
         if not sessions:
             print("No sessions found.")
