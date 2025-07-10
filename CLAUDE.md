@@ -94,7 +94,7 @@ agent_engine_id = agent_engine.name
 ### Memory Management Process
 1. **Session Creation**: Create sessions with VertexAiSessionService for immediate conversation state
 2. **Conversation Flow**: Handle user interactions through the runner with Vertex AI session persistence
-3. **Memory Persistence**: Add completed sessions to Vertex AI Memory Bank for long-term storage
+3. **Memory Persistence**: Automatic callback transfers completed sessions to Vertex AI Memory Bank for long-term storage
 4. **Memory Recall**: Use PreloadMemoryTool to retrieve relevant context from Memory Bank
 
 ### Architecture
@@ -186,23 +186,43 @@ runner = Runner(
 )
 ```
 
-### 2. Memory Persistence
+### 2. Memory Persistence (Automatic Callback)
 ```python
-# After conversation completion - retrieve from VertexAiSessionService
-completed_session = await runner.session_service.get_session(
-    app_name=app_name, user_id=USER_ID, session_id=session_id
-)
+# Define automatic memory transfer callback
+async def auto_save_to_memory_callback(callback_context):
+    """Automatically save completed sessions to memory bank"""
+    try:
+        session_id = callback_context.session_id
+        user_id = getattr(callback_context, 'user_id', "user_123")
+        app_name = getattr(callback_context, 'app_name', "adk-memory-bot")
+        
+        # Initialize services
+        session_service = VertexAiSessionService(
+            project=PROJECT_ID,
+            location=LOCATION,
+            agent_engine_id=agent_engine_id
+        )
+        memory_service = VertexAiMemoryBankService(
+            project=PROJECT_ID,
+            location=LOCATION,
+            agent_engine_id=agent_engine_id
+        )
+        
+        # Get and transfer session to memory
+        session = await session_service.get_session(app_name, user_id, session_id)
+        await memory_service.add_session_to_memory(session)
+        
+    except Exception as e:
+        print(f"Error auto-saving to memory: {e}")
 
-# Transfer to Vertex AI Memory Bank for long-term storage
-await memory_bank_service.add_session_to_memory(completed_session)
-
-# Test memory recall in new session
-new_session = await session_service.create_session(app_name=app_name, user_id=USER_ID)
-response = await call_agent_async(
-    "What did we discuss before?", 
-    runner, USER_ID, new_session.id
+# Agent with automatic memory callback
+agent = adk.Agent(
+    model="gemini-2.5-flash",
+    name="memory_assistant",
+    instruction="""System prompt with memory utilization instructions""",
+    tools=[adk.tools.preload_memory_tool.PreloadMemoryTool()],
+    after_agent_callback=auto_save_to_memory_callback,
 )
-# Agent will use PreloadMemoryTool to search Memory Bank
 ```
 
 ## Error Handling and Production Considerations
