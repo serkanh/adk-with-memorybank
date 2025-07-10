@@ -304,53 +304,130 @@ docker-compose run --rm memory-bot-web adk list agents
 - **Logs**: Created in `/app/logs` inside containers and visible in your local `./logs` directory
 - **Development**: Clean, focused mounting ensures ADK works correctly while keeping development files accessible
 
-## Understanding Memory Persistence
+## Understanding Memory Persistence: Deep Dive
 
-### How Sessions Are Saved to Memory
+### How Sessions and Memory Work Together
 
-The memory system works automatically through a callback mechanism:
+The ADK memory system uses a two-tier approach for optimal performance and long-term memory:
 
-1. **Session Storage (Automatic)**: Conversations are automatically stored in `VertexAiSessionService`
-2. **Memory Transfer (Automatic)**: After each conversation, the `auto_save_to_memory_callback` automatically transfers the session to `VertexAiMemoryBankService`
+#### 1. **Session Service (VertexAiSessionService)** - Immediate State
+- **Purpose**: Real-time conversation storage
+- **Data Structure**: Events array with user/agent message exchanges
+- **Lifecycle**: Created per conversation, active during chat
+- **Access**: Direct retrieval by session ID
+- **Performance**: Fast, immediate access to current conversation
 
-### Automatic Memory Transfer
+#### 2. **Memory Bank (VertexAiMemoryBankService)** - Long-term Storage
+- **Purpose**: Semantic memory across all conversations
+- **Data Structure**: Processed, searchable memory chunks
+- **Lifecycle**: Persistent, grows over time
+- **Access**: Semantic search using vector embeddings
+- **Performance**: Intelligent context retrieval from history
 
-The `memory_assistant` agent includes an `after_agent_callback` that:
-- Triggers after each conversation turn
-- Retrieves the completed session from VertexAiSessionService
-- Automatically saves it to the Memory Bank for long-term storage
-- Ensures all conversations are immediately available for future memory recall
+### The Automatic Memory Transfer System
 
-### Troubleshooting Session Service Issues
+The `memory_assistant` agent includes an `after_agent_callback` that automatically handles memory persistence:
 
-If you encounter session service errors, run these diagnostic tests:
-
-```bash
-# Test session service configuration
-docker-compose run --rm memory-bot-web python test_session_service.py
-
-# Check current sessions and memories
-docker-compose run --rm memory-bot-web python check_sessions_memory.py
+```python
+async def auto_save_to_memory_callback(callback_context):
+    """Automatically save completed sessions to memory bank"""
+    # Extract session information from callback context
+    session_id = callback_context._invocation_context.session.id
+    user_id = callback_context._invocation_context.user_id
+    app_name = callback_context._invocation_context.session.app_name
+    
+    # Get session directly from invocation context (has current events)
+    session = callback_context._invocation_context.session
+    
+    # Check if session has meaningful content (at least 2 events)
+    if hasattr(session, 'events') and len(session.events) >= 2:
+        # Transfer to memory bank
+        await memory_service.add_session_to_memory(session)
+        print(f"✅ Session {session_id} automatically saved to memory bank")
 ```
 
-**Status**: ✅ **Memory callback is now working!** The session service issues have been resolved.
+### Critical Technical Details
 
-**Fixed**: The ADK session service returns a `ListSessionsResponse` object instead of a direct list. Our diagnostic scripts confirmed the session service is working properly, and the automatic memory callback is now re-enabled.
+#### Why Direct Session Access Works
+**Problem**: When using `session_service.get_session()`, the retrieved session often has empty events because the callback runs before the session is fully persisted.
 
-### Why This Design?
+**Solution**: The callback context contains the live session with all current events:
+```python
+# ❌ Wrong - retrieves from service (may be empty)
+session = await session_service.get_session(app_name, user_id, session_id)
 
-- **Sessions**: Store active conversation state, immediate access
-- **Memory**: Store processed, semantic-searchable long-term context
-- **Automatic**: No manual intervention needed - callback handles everything
-- **Immediate**: Conversations are available for memory recall right away
+# ✅ Correct - uses live session from context
+session = callback_context._invocation_context.session
+```
 
-### Memory Usage Flow
+#### Session Structure Understanding
+Sessions contain an `events` array, not `contents`:
+```python
+# Check for meaningful content
+if hasattr(session, 'events') and session.events:
+    content_count = len(session.events)
+    has_content = content_count >= 2  # User message + agent response
+```
 
-1. **Chat with agent** → Session stored in VertexAiSessionService
-2. **Agent responds** → `after_agent_callback` triggers automatically
-3. **Session transferred** → Automatically moved to Memory Bank
-4. **New conversation** → PreloadMemoryTool searches Memory Bank for context
-5. **Agent responds** → Uses retrieved memories for personalized responses
+#### Memory Transfer Timing
+The callback runs immediately after the agent completes its response, ensuring:
+- **Immediate availability**: New conversations are instantly available for memory recall
+- **No data loss**: Every conversation is automatically preserved
+- **Seamless integration**: No manual intervention required
+
+### Memory Usage Flow (Detailed)
+
+1. **User sends message** → Stored in VertexAiSessionService as event
+2. **PreloadMemoryTool searches** → Memory Bank for relevant context
+3. **Agent processes** → Combines current context with retrieved memories
+4. **Agent responds** → Response stored in VertexAiSessionService as event
+5. **Callback triggers** → `auto_save_to_memory_callback` executes
+6. **Session transferred** → Automatically moved to Memory Bank
+7. **Future conversations** → Can access this memory through semantic search
+
+### Troubleshooting Memory Issues
+
+#### Common Problems and Solutions
+
+**1. PreloadMemoryTool Not Working**
+- **Symptom**: Tool returns code instead of executing
+- **Cause**: No memories exist yet, or memory transfer failed
+- **Solution**: Ensure automatic memory transfer is working (check logs)
+
+**2. Empty Session Events**
+- **Symptom**: Sessions appear empty in callback
+- **Cause**: Using session service retrieval instead of callback context
+- **Solution**: Use `callback_context._invocation_context.session`
+
+**3. Memory Not Persisting**
+- **Symptom**: New conversations don't recall previous context
+- **Cause**: Memory transfer callback not triggering or failing
+- **Solution**: Check callback logs and ensure proper service configuration
+
+#### Diagnostic Commands
+```bash
+# Test memory system
+docker-compose run --rm memory-bot-web python check_sessions_memory.py
+
+# Check callback logs
+docker-compose logs memory-bot-web | grep "Auto-saving\|✅\|❌"
+```
+
+### Why This Design Works
+
+- **Performance**: Sessions for immediate access, Memory Bank for historical context
+- **Reliability**: Automatic transfer ensures no data loss
+- **Scalability**: Semantic search scales better than session enumeration
+- **User Experience**: Seamless memory across conversations
+- **Developer Experience**: No manual memory management required
+
+### Status: ✅ **Memory System Fully Operational**
+
+The memory persistence system is now working correctly:
+- Sessions are automatically created and managed
+- Memory transfer happens immediately after each conversation
+- PreloadMemoryTool successfully retrieves relevant context
+- All conversations are preserved for future reference
 
 ### Option 2: Local Development
 
@@ -446,18 +523,78 @@ DEFAULT_USER_ID=user_123
 
 ## How It Works
 
-### Memory Architecture
-1. **Agent Engine**: Single Vertex AI Agent Engine manages both session and memory services
-2. **Session Service**: Active conversation state with VertexAiSessionService
-3. **Memory Bank Service**: Long-term storage with VertexAiMemoryBankService
-4. **PreloadMemoryTool**: Built-in tool for automatic memory access
+### Memory Architecture (Technical Deep Dive)
 
-### Conversation Flow
-1. User sends message → Agent receives input
-2. PreloadMemoryTool automatically searches relevant memories
-3. Agent responds with both session context and memory context
-4. New conversation data stored in session service
-5. Completed sessions can be transferred to memory bank for long-term storage
+The system uses a sophisticated two-tier memory architecture:
+
+#### 1. **Session Layer (VertexAiSessionService)**
+- **Function**: Immediate conversation state management
+- **Storage**: Events array with structured user/agent exchanges
+- **Lifecycle**: Active during conversation, persisted in real-time
+- **Access Pattern**: Direct session ID lookup for current conversation
+
+#### 2. **Memory Layer (VertexAiMemoryBankService)**
+- **Function**: Long-term semantic memory storage
+- **Storage**: Processed, vector-indexed conversation summaries
+- **Lifecycle**: Persistent across all conversations, continuously growing
+- **Access Pattern**: Semantic search using vector embeddings
+
+#### 3. **Integration Layer (Callback System)**
+- **Function**: Automatic transfer from sessions to memory
+- **Trigger**: After each agent response completion
+- **Data Source**: Live session from callback context (not service retrieval)
+- **Process**: Validates content and transfers to memory bank
+
+### Detailed Conversation Flow
+
+```
+1. User Message Input
+   ↓
+2. Session Service (store user message as event)
+   ↓
+3. PreloadMemoryTool (semantic search in Memory Bank)
+   ↓ (relevant context retrieved)
+4. Agent Processing (combines session context + memory context)
+   ↓
+5. Agent Response Generated
+   ↓
+6. Session Service (store agent response as event)
+   ↓
+7. After Agent Callback (triggered automatically)
+   ↓
+8. Session Transfer (callback context session → Memory Bank)
+   ↓
+9. Ready for Next Conversation (memory available for recall)
+```
+
+### Technical Implementation Details
+
+#### Callback Context Access
+The system uses direct session access from the callback context:
+```python
+# Extract from callback context (has live events)
+session = callback_context._invocation_context.session
+session_id = callback_context._invocation_context.session.id
+user_id = callback_context._invocation_context.user_id
+app_name = callback_context._invocation_context.session.app_name
+```
+
+#### Session Event Structure
+Sessions contain events, not contents:
+```python
+# Session structure
+session.events = [
+    Event(content=Content(parts=[Part(text='user message')], role='user')),
+    Event(content=Content(parts=[Part(text='agent response')], role='model'))
+]
+```
+
+#### Memory Transfer Validation
+Only meaningful sessions are transferred:
+```python
+# At least 2 events (user message + agent response)
+has_content = len(session.events) >= 2
+```
 
 ### Agent Configuration
 
@@ -467,6 +604,89 @@ The agent (`agents/memory_assistant/agent.py`) includes:
 - **Tools**: PreloadMemoryTool for automatic memory access
 - **Instructions**: Specialized prompts for memory-aware conversations
 - **Memory Integration**: Seamless access to conversation history
+
+## Key Learnings and Best Practices
+
+### Critical Implementation Insights
+
+#### 1. **Callback Context is Key**
+The most important discovery: session data must be accessed from the callback context, not retrieved from the session service:
+```python
+# ❌ This often returns empty sessions
+session = await session_service.get_session(app_name, user_id, session_id)
+
+# ✅ This always has the current conversation events
+session = callback_context._invocation_context.session
+```
+
+#### 2. **Sessions Use Events, Not Contents**
+Sessions have an `events` array structure:
+```python
+# ❌ Wrong assumption
+if session.contents:
+    process_content(session.contents)
+
+# ✅ Correct implementation
+if session.events:
+    process_events(session.events)
+```
+
+#### 3. **Memory Transfer Requires Meaningful Content**
+Only transfer sessions with actual conversation exchanges:
+```python
+# Check for at least user message + agent response
+has_content = len(session.events) >= 2
+```
+
+### Best Practices for Memory-Enabled Agents
+
+#### Agent Design
+- **Instructions**: Write clear instructions for memory usage
+- **Tool Integration**: Trust the PreloadMemoryTool to find relevant context
+- **Response Style**: Naturally reference memories without explicitly mentioning "memory search"
+
+#### Callback Implementation
+- **Error Handling**: Always wrap in try-catch with detailed logging
+- **Content Validation**: Check for meaningful content before transfer
+- **Environment Variables**: Use environment variables for service configuration
+
+#### Development Workflow
+1. **Test Memory Transfer**: Ensure callbacks are working (check logs)
+2. **Verify Memory Retrieval**: Confirm PreloadMemoryTool is finding context
+3. **Validate Agent Behavior**: Test that agents use memories naturally
+
+### Common Pitfalls and Solutions
+
+#### Problem: PreloadMemoryTool Returns Code
+**Cause**: No memories exist yet, or memory transfer is failing
+**Solution**: Check callback logs, ensure sessions are being transferred
+
+#### Problem: Sessions Appear Empty
+**Cause**: Using session service retrieval instead of callback context
+**Solution**: Always use `callback_context._invocation_context.session`
+
+#### Problem: Memory Not Persisting
+**Cause**: Callback errors or content validation failures
+**Solution**: Review callback logs, ensure proper service configuration
+
+### Testing and Validation
+
+#### Quick Memory Test
+```bash
+# Start the bot
+docker-compose up memory-bot-web
+
+# Have a conversation, then check logs
+docker-compose logs memory-bot-web | grep "Auto-saving\|✅\|❌"
+
+# Should see: ✅ Session {id} automatically saved to memory bank
+```
+
+#### Memory Retrieval Test
+```bash
+# In a new conversation, ask about previous topics
+# The agent should reference past conversations naturally
+```
 
 ## Development
 
