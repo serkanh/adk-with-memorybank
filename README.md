@@ -304,6 +304,54 @@ docker-compose run --rm memory-bot-web adk list agents
 - **Logs**: Created in `/app/logs` inside containers and visible in your local `./logs` directory
 - **Development**: Clean, focused mounting ensures ADK works correctly while keeping development files accessible
 
+## Understanding Memory Persistence
+
+### How Sessions Are Saved to Memory
+
+The memory system works automatically through a callback mechanism:
+
+1. **Session Storage (Automatic)**: Conversations are automatically stored in `VertexAiSessionService`
+2. **Memory Transfer (Automatic)**: After each conversation, the `auto_save_to_memory_callback` automatically transfers the session to `VertexAiMemoryBankService`
+
+### Automatic Memory Transfer
+
+The `memory_assistant` agent includes an `after_agent_callback` that:
+- Triggers after each conversation turn
+- Retrieves the completed session from VertexAiSessionService
+- Automatically saves it to the Memory Bank for long-term storage
+- Ensures all conversations are immediately available for future memory recall
+
+### Troubleshooting Session Service Issues
+
+If you encounter session service errors, run these diagnostic tests:
+
+```bash
+# Test session service configuration
+docker-compose run --rm memory-bot-web python test_session_service.py
+
+# Check current sessions and memories
+docker-compose run --rm memory-bot-web python check_sessions_memory.py
+```
+
+**Status**: ✅ **Memory callback is now working!** The session service issues have been resolved.
+
+**Fixed**: The ADK session service returns a `ListSessionsResponse` object instead of a direct list. Our diagnostic scripts confirmed the session service is working properly, and the automatic memory callback is now re-enabled.
+
+### Why This Design?
+
+- **Sessions**: Store active conversation state, immediate access
+- **Memory**: Store processed, semantic-searchable long-term context
+- **Automatic**: No manual intervention needed - callback handles everything
+- **Immediate**: Conversations are available for memory recall right away
+
+### Memory Usage Flow
+
+1. **Chat with agent** → Session stored in VertexAiSessionService
+2. **Agent responds** → `after_agent_callback` triggers automatically
+3. **Session transferred** → Automatically moved to Memory Bank
+4. **New conversation** → PreloadMemoryTool searches Memory Bank for context
+5. **Agent responds** → Uses retrieved memories for personalized responses
+
 ### Option 2: Local Development
 
 1. Install dependencies:
